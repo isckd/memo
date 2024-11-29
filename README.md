@@ -279,9 +279,9 @@ https://grafana.com/grafana/dashboards/11378-justai-system-monitor/   사내 spr
 
 ```
 
-docker pull grafana/k6:latest
+docker pull grafana/k6:0.55.0
 
-docker save -o k6.tar grafana/k6:latest
+docker save -o k6.tar grafana/k6:0.55.0
 
 cd ;
 
@@ -325,7 +325,7 @@ export default function () {
 
 # /data/home/vcc/docker/load-test:/scripts 을 마운트해서, test-script.js 파일을 실행한다는 의미이다.
 
-docker run --rm -i -v ${docker 외부에서 마운트할 디렉토리}/load-test:/scripts grafana/k6:latest run /scripts/test-script.js
+docker run --rm -i -v ${docker 외부에서 마운트할 디렉토리}/load-test:/scripts grafana/k6:0.55.0 run /scripts/test-script.js
 
 ```
 
