@@ -47,18 +47,22 @@ InfluxDB는 고속의 데이터 쓰기와 읽기가 가능하여 모니터링 �
 ---
 ---
 
-
+2024.11.29 기준 각 모니터링/부하테스트 툴 최신 docker Tag(버전) 적용
+	prom/prometheus:v3.0.1
+	grafana/grafana:11.3.1
+	influxdb:2.7.10
+	k6:0.55.0
 
 
 1. Springboot 인스턴스 메트릭 수집을 위한 Prometheus 설정
 
 ```
-
+# build.gradle.kts
 dependencies {
-
     implementation("io.micrometer:micrometer-registry-prometheus")
-
 }
+
+# application.yml 에서 actuator 의 prometheus endpoint 노출하도록 변경해야 한다.
 
 ```
 
@@ -168,10 +172,13 @@ services:
     ports:
       - "8086:8086" # InfluxDB API
     environment:
-      - INFLUXDB_DB=metrics # 기본 데이터베이스 이름
-      - INFLUXDB_ADMIN_USER=admin
-      - INFLUXDB_ADMIN_PASSWORD=admin
-      - INFLUXDB_HTTP_AUTH_ENABLED=true
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin              # 관리자 계정 이름
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword      # 관리자 계정 비밀번호
+      - DOCKER_INFLUXDB_INIT_ORG=my-org                 # 조직 이름
+      - DOCKER_INFLUXDB_INIT_BUCKET=my-bucket           # 기본 버킷 이름
+      - DOCKER_INFLUXDB_INIT_RETENTION=7d               # 데이터 보존 기간 (7일)
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-secret-token # 인증 토큰
     volumes:
       - influxdb-data:/var/lib/influxdb
     restart: always
@@ -215,26 +222,27 @@ scrape_configs:
 5. ${docker 외부에서 마운트할 디렉토리}/provisioning/datasources/datasource.yml 파일 작성
 
 ```
-
 apiVersion: 1
-
 
 datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090 # Prometheus 컨테이너 이름 사용
-    isDefault: true
+    isDefault: false
 
   - name: InfluxDB
     type: influxdb
     access: proxy
-    url: http://influxdb:8086 # InfluxDB 컨테이너 이름 사용
-    database: metrics
-    user: admin
-    password: admin
+    url: http://influxdb:8086   # InfluxDB 컨테이너 이름 사용
+    isDefault: true             # InfluxDB를 기본 데이터 소스로 설정
     jsonData:
-      httpMode: POST
+      defaultBucket: my-bucket  # InfluxDB에서 생성된 기본 버킷 이름
+      organization: my-org      # InfluxDB의 조직 이름
+      version: Flux             # InfluxDB 2.x에서는 Flux 언어를 사용
+      httpMode: POST            # HTTP 메서드 설정
+    secureJsonData:
+      token: my-secret-token    # InfluxDB 2.x에서 사용하는 인증 토큰
 
 ```
 
