@@ -82,7 +82,7 @@ dependencies {
 
 docker pull prom/prometheus:v3.0.1
 docker pull grafana/grafana:11.3.1
-docker pull influxdb:2.7.10
+docker pull influxdb:1.1.18
 
 ```
 
@@ -94,8 +94,7 @@ docker pull influxdb:2.7.10
 
 docker save -o prometheus.tar prom/prometheus:v3.0.1
 docker save -o grafana.tar grafana/grafana:11.3.1
-docker save -o influxdb.tar influxdb:2.7.10
-
+docker save -o influxdb.tar influxdb:1.1.18
 ```
 
 
@@ -137,8 +136,6 @@ docker images
 ```
 
 version: '3.7'
-
-
 
 services:
   prometheus:
@@ -199,7 +196,7 @@ networks:
 
 
 
-4. ${docker 외부에서 마운트할 디렉토리}.prometheus.yml 파일 작성
+4. ${docker 외부에서 마운트할 디렉토리}/prometheus.yml 파일 작성
 
 아래 예시
 
