@@ -145,16 +145,18 @@ services:
     image: prom/prometheus:v3.0.1
     container_name: prometheus
     ports:
-      - "19090:9090" # Prometheus 웹 UI, 9090 포트 사용 중이라 외부 포트는 19090 으로 매핑
+      - "9093:9090" # Prometheus 웹 UI, 9090 포트 사용 중이라 외부 포트는 9093 으로 매핑
     volumes:
       -  ${docker 외부에서 마운트할 디렉토리}/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitoring_network
     restart: always
 
   grafana:
     image: grafana/grafana:11.3.1
     container_name: grafana
     ports:
-      - "33000:3000" # Grafana 웹 UI, 3000 포트 사용 중이라 외부 포트는 33000 으로 매핑
+      - "3305:3000" # Grafana 웹 UI, 3000 포트 사용 중이라 외부 포트는 3305 으로 매핑
     environment:
       - GF_SECURITY_ADMIN_USER=admin # Grafana 기본 사용자
       - GF_SECURITY_ADMIN_PASSWORD=admin # Grafana 기본 비밀번호
@@ -164,32 +166,34 @@ services:
     depends_on:
       - prometheus
       - influxdb
+    networks:
+      - monitoring_network
     restart: always
 
   influxdb:
-    image: influxdb:2.7.10
+    image: influxdb:1.11.8				# influxdb 2.x 버전은 k6 와 호환성이 떨어짐
     container_name: influxdb
     ports:
       - "8086:8086" # InfluxDB API
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin              # 관리자 계정 이름
-      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword      # 관리자 계정 비밀번호
-      - DOCKER_INFLUXDB_INIT_ORG=my-org                 # 조직 이름
-      - DOCKER_INFLUXDB_INIT_BUCKET=my-bucket           # 기본 버킷 이름
-      - DOCKER_INFLUXDB_INIT_RETENTION=7d               # 데이터 보존 기간 (7일)
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-secret-token # 인증 토큰
+      - INFLUXDB_DB=metrics # 기본 데이터베이스 이름
+      - INFLUXDB_ADMIN_USER=admin
+      - INFLUXDB_ADMIN_PASSWORD=admin
+      - INFLUXDB_HTTP_AUTH_ENABLED=false
     volumes:
       - influxdb-data:/var/lib/influxdb
+    networks:
+      - monitoring_network
     restart: always
 
 volumes:
   grafana-data:
   influxdb-data:
 
-
-
-
+networks:
+  monitoring_network:
+    driver: bridge
+    name: monitoring_network
 
 ```
 
@@ -234,15 +238,12 @@ datasources:
   - name: InfluxDB
     type: influxdb
     access: proxy
-    url: http://influxdb:8086   # InfluxDB 컨테이너 이름 사용
-    isDefault: true             # InfluxDB를 기본 데이터 소스로 설정
+    url: http://influxdb:8086 # InfluxDB 컨테이너 이름 사용
+    database: metrics
+    user: admin
+    password: admin
     jsonData:
-      defaultBucket: my-bucket  # InfluxDB에서 생성된 기본 버킷 이름
-      organization: my-org      # InfluxDB의 조직 이름
-      version: Flux             # InfluxDB 2.x에서는 Flux 언어를 사용
-      httpMode: POST            # HTTP 메서드 설정
-    secureJsonData:
-      token: my-secret-token    # InfluxDB 2.x에서 사용하는 인증 토큰
+      httpMode: POST   
 
 ```
 
@@ -331,9 +332,10 @@ export default function () {
 
 ```
 
-# /data/home/vcc/docker/load-test:/scripts 을 마운트해서, test-script.js 파일을 실행한다는 의미이다.
+# ${docker 외부에서 마운트할 디렉토리}/load-test:/scripts 을 마운트해서, test-script.js 파일을 실행한다는 의미이다.
 
-docker run --rm -i -v ${docker 외부에서 마운트할 디렉토리}/load-test:/scripts grafana/k6:0.55.0 run /scripts/test-script.js
+docker run --rm -i --network monitoring_network -v ${docker 외부에서 마운트할 디렉토리}/load-test:/scripts grafana/k6:0.55.0 run \
+  --out influxdb=http://influxdb:8086/metrics /scripts/test-script.js
 
 ```
 
@@ -356,7 +358,7 @@ docker run --rm -i -v ${docker 외부에서 마운트할 디렉토리}/load-test
 
 우선 K6 result 를 dashboard 로 표현할 수 있는 템플릿을 다운받는다.
 
-https://grafana.com/grafana/dashboards/18030-k6-prometheus-native-histograms/     # Grafana Labs 공식 K6 모니터링 템플릿
+K6 모니터링 템플릿
 
-위와 마찬가지로 Json 으로 다운받아 폐쇄망의 DashBoards 에 import 한다.
+
 
