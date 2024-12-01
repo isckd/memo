@@ -1,7 +1,12 @@
 # K6 부하테스트, Grafana (+ influx DB) 모니터링, Prometheus 인스턴스 메트릭 수집
 
+![](https://velog.velcdn.com/images/mud_cookie/post/5dd7fe1a-658f-433c-acca-c82549b45ca6/image.png)
+
+<br>
+<br>
+
 위 기술에 대해 검색해보면 대부분 로컬 환경에서 혼자 실행하는 것을 목표로 하기 때문에 따로 블로그를 작성한다.
-조직에서, 특히 폐쇄망에서 사내 구성원들이 하나의 환경에서 사용하고, 커스텀한 DashBoard 구축을 목표로 진행한다.
+조직에서, 특히 폐쇄망에서 사내 구성원들이 하나의 환경에서 사용할 수 있게 하고, 커스텀한 시각화 DashBoard 구축을 목표로 진행한다.
 
 <br>
 <br>
@@ -13,7 +18,7 @@
 
 ## 도입 이유
 
-사내 Spring Boot 기반의 MSA 아키텍처로 구성된 개발 환경에서는, 그동안 부하 테스트 및 모니터링에 적합한 도구를 제대로 사용하지 않고 있었다.
+사내 Spring Boot 기반의 MSA 아키텍처로 구성된 개발 환경에서는, 그동안 부하 테스트 및 모니터링에 적합한 도구를 제대로 사용하고 있는지는 의문이었다.
 
 대부분 개발자들이 각자 로컬 환경에서 JMeter를 사용하여 부하 테스트를 진행했지만, JMeter는 일반 Thread를 사용하기 때문에 스레드 하나 당 메모리 1MB 이상을 소비하는 단점이 있었다.
 
@@ -22,8 +27,12 @@
 이에 따라 보다 중앙화해 관리할 수 있고, 정형화되고 효율적인 부하 테스트 및 모니터링 도구를 도입하기로 결정했다.
 
 > 먼저, Go 언어의 코루틴(고루틴) 기반으로 동작하여 메모리 효율이 뛰어난 (Java 의 일반 Thread 에 비해 1,000배 이상 메모리 효율이 좋은) K6를 부하 테스트 도구로 적용하였다. <br>
-K6는 경량화된 구조 덕분에 높은 부하를 생성하면서도 시스템 자원 사용을 최소화할 수 있었다.
-K6 vs JMeter 부하테스트 도구 비교 : https://grafana.com/blog/2021/01/27/k6-vs-jmeter-comparison/ 
+특히 일반적인 쓰레드는 OS 에 종속되며 메모리 사용량이 크며, 컨텍스트 스위칭이 발생할 때마다 OS 에 직접적으로 시스템 콜이 발생해 부하가 있는 편이다.
+코루틴은 경량화된 쓰레드 개념으로, 
+관리 주체가 OS 가 아닌 JVM 에서 관리하기 때문에 (Go 도 JVM 위에서 동작하는 언어이다.) 컨텍스트 스위칭 비용이 적고, 낮은 메모리 사용량 덕분에 JMeter 와 같은 일반 쓰레드로 동작하는 도구에 비해 K6 는 훨씬 많은 VUser (가상 사용자 수) 를 사용 가능하다.
+K6는 이러한 경량화된 구조 덕분에 높은 부하를 생성하면서도 시스템 자원 사용을 최소화할 수 있었다.
+K6 vs JMeter 부하테스트 도구 비교 : 
+- [K6 vs JMeter (Grafana Blog)](https://grafana.com/blog/2021/01/27/k6-vs-jmeter-comparison/)
 
 부하 테스트와 함께 시스템 전반의 성능을 모니터링하기 위해 시각화 도구인 Grafana를 도입했다.
 
@@ -78,13 +87,17 @@ InfluxDB는 고속의 데이터 쓰기와 읽기가 가능하여 모니터링 �
 
 아래 소개할 설치과정에서 조직 공통으로 사용하기 위해 설정한 특이사항들을 소개한다.
 
-- 2024/11 기준 최신 버전인 
+- 2024/12 기준 최신 버전인 
 	prometheus:v3.0.1
     grafana:11.3.1
  을 기준으로 진행하고, InfluxDB 는 2.x 버전에서 아직 K6 와의 호환성이 떨어지므로 1.x 버전 중 최신인 1.11.8 으로 진행한다. 대신 InfluxDB 1.x 버전은 웹 UI 를 지원하지 않는다.
 - docker-compose 로 prometheus, grafana, influxDB 를 하나로 관리한다.
 - K6 는 각 로컬 환경에서 실행하는 것이 일반적이나, 테스트 스크립트 중앙화 및 조직 내 편의성을 위해 폐쇄망에서 Docker 로 설치한다.
+로컬 PC 의 하드웨어 성능 제약을 벗어나려는 의도도 존재한다.
 다만 Docker K6 는 컨테이너를 일회성으로 띄우는 방식이므로, 위 docker-compose 로 같이 관리하지 않고 docker run 명령어로 실행시킬 수 있게 한다.
+- 각 Spring Boot 인스턴스들의 데이터를 바로 Influx DB 에 저장하지 않은 이유는
+운영환경에서는 이미 Jennifer 모니터링 도구를 사용하고 있기 때문이다.
+개발 환경에서 InfluxDB 에 데이터를 저장하는 request 를 보내는 코드가 운영환경에서 돌지 않기를 원했고, 결론적으로 Spring Boot Instance 들은 actuator endpoint 만 제공하고 Prometheus 에서 해당 API 를 Polling 하는 방식을 채택해 운영환경에서 불필요한 오버헤드가 발생하지 않게 설정했다.
 - 다수의 구성원들이 작성한 테스트 결과들이 중첩되는 것을 방지하기 위해, Grafana 에서 K6 모니터링 DashBoard 를 조금 커스텀했다.
 
 <br>
@@ -238,7 +251,7 @@ docker save -o influxdb.tar influxdb:1.1.18
 
 cd ;
 explorer.exe .
-# 이후 열린 WSL 파일 탐색기에서 Window 로 파일 이관 → 폐쇄망으로 이관한다. 또는 바로 SSH 로 파일 업로드를 해도 된다.
+# 이후 열린 WSL 파일 탐색기에서 Window 로 파일 이관 → 폐쇄망으로 이관한다. 또는 바로 SFTP 로 파일 업로드를 해도 된다.
 ```
 
 <br>
@@ -462,7 +475,7 @@ docker images  #설치 확인
 ```
 
 
-#### 4.2 ${docker 외부에서 마운트할 디렉토리}/load-test/test-script.js 작성
+#### 4.2 ${docker 외부에서 마운트할 디렉토리}/load-test/${팀명}/test-script.js 작성
 
 k6 테스트를 위한 script 를 작성한다.
 k6 는 기본적으로 Javascript 로 구동되는데, 크게 어려울 것은 없고 자세한 스크립트 작성법은 
@@ -482,11 +495,13 @@ export let options = {
 };
 
 export default function () {
-	// 테스트할 API 를 지정한다.
+	// 테스트할 API 를 지정하고, group 명을 지정한다.
     // 만약 Linux 에서 Spring Boot 인스턴스가 docker 외부의 localhost 에 존재한다면, localhost -> 172.17.0.1 으로 대체한다.
     // Windows 또는 Mac 환경이라면 host.docker.internal 로 대체.
-    const res = http.get('http://localhost:8080/test');
-    sleep(1);
+    group('POST /test', function () {
+    	const res = http.get('http://localhost:8080/test');
+    	sleep(1);    
+    }
 }
 ```
 
@@ -498,7 +513,7 @@ export default function () {
 
 ```
 docker run --rm --network monitoring_network \
-  -v ${docker 외부에서 마운트할 디렉토리}/load-test:/scripts grafana/k6:0.55.0 run \
+  -v ${docker 외부에서 마운트할 디렉토리}/load-test/${팀명}:/scripts grafana/k6:0.55.0 run \
   --out influxdb=http://influxdb:8086/metrics \
   /scripts/test-script.js
 ```
@@ -510,7 +525,7 @@ docker run --rm --network monitoring_network \
 - --out influxdb=http://influxdb:8086/metrics : 테스트 결과를 InfluxDB 로 저장
 - /scripts/test-script.js : 마운트한 디렉토리에서 (${docker 외부에서 마운트할 디렉토리}/load-test) test-script.js 를 실행함을 알린다.
 
-각 개발자는 ${docker 외부에서 마운트할 디렉토리}/load-test 디렉토리에서 스크립트를 작성하고, 위 명령어에서 test-script.js 대신 본인이 작성한 스크립트 명을 넣기만 하면 된다.
+각 개발자는 ${docker 외부에서 마운트할 디렉토리}/load-test/${팀명} 디렉토리에서 스크립트를 작성하고, 위 명령어에서 test-script.js 대신 본인이 작성한 스크립트 명을 넣기만 하면 된다.
 
 터미널에서 실행한 K6 스크립트 결과는 아래 예시와 같이 출력된다.
 참고로, K6 는 진행상황과 결과를 InfluxDB 에 1초마다 저장한다.
@@ -567,8 +582,10 @@ SHOW MEASUREMENTS
 # vus_max
 
 
-# test-script.js 에서 설정한 test_name 이라는 tag 값이 잘 저장되었는지 확인
+# test-script.js 에서 설정한 team, test_name, group 이라는 tag 값이 잘 저장되었는지 확인
+SHOW TAG VALUES WITH KEY = "team"
 SHOW TAG VALUES WITH KEY = "test_name"
+SHOW TAG VALUES WITH KEY = "group"
 
 
 # 저장된 값 중 상위 10개 확인 예시 (MEASUREMENT 목록 중 하나를 선택)
@@ -589,21 +606,30 @@ SELECT * FROM http_req_connecting LIMIT 10
 기본적으로는 https://grafana.com/grafana/dashboards/2587-k6-load-testing-results/
 템플릿을 사용하려 했으나, 테스트 결과가 중첩되는 문제가 발생해 템플릿을 조금 커스텀했다.
 
-DashBoard 의 variabels 에 test_name 을 추가하고,
-SHOW TAG VALUES WITH KEY = "test_name" 값을 넣었다.
+DashBoard 의 variabels 에 team, test_name, group 을 추가하고,
+SHOW TAG VALUES WITH KEY = "team" 
+SHOW TAG VALUES WITH KEY = "test_name" 
+SHOW TAG VALUES WITH KEY = "group" 
+값을 넣었다.
 이후 DashBoard 의 각 그래프에서 test_name 변수 값을 기준으로 아래와 같은 WHERE 조건문을 넣었다.
-`WEHRE "test_name" =~ /^$test_name$/`
+`WEHRE team =~ /^$team$/ AND test_name =~ /^$test_name$/ AND \"group\" =~ /^$group$/ `
 
 그래서 완성된 json 파일은 아래 Github 에 넣어두었다.
-`k6 Load Testing Results-with-test_name.json` 파일을 download 받으면 된다.
+`k6 Load Testing Results-with-test_name.json` 코드를 복붙하면 된다.
+
 https://github.com/isckd/memo/blob/main/k6%20Load%20Testing%20Results-with-test_name.json
 
 json 파일을 기준으로 DashBoard 를 import 하는 것은 위에서 이미 설명했으므로 생략한다.
 import 가 완료되었다면 아래와 같은 화면이 출력된다.
 
-> 내가 커스텀한 것은 test_name 이라는 변수 값으로, 강조한 박스 안에서 원하는 test_name 태그를 선택하면 해당 결과만 출력할 수 있다.
+> 내가 커스텀한 것은 team, test_name, group 이라는 변수 값으로, 강조한 박스 안에서 원하는 tean, test_name, group 태그를 선택하면 해당 결과만 출력할 수 있다.
+또한 기존 템플릿의 Error Per Second 그래프가 보이지 않는 이슈를 해결하고,
+최상단에는 총 Http request 수, failed 수, data sent, data received 를,
+최하단에는 URL 별로 http_req_duration 값을 Table 형태로 노출시켰다.
 
-![](https://velog.velcdn.com/images/mud_cookie/post/c213d003-283b-4bb8-a71d-739f692fa12d/image.png)
+![](https://velog.velcdn.com/images/mud_cookie/post/bf4701ac-ae69-4b72-a27d-02633aa261f9/image.png)
+
+
 
 DashBoard 를 어떻게 커스텀했는지는 아래에 작성한다.
 
@@ -635,7 +661,10 @@ K6 테스트 스크립트 안에 tag 값을 집어넣는다.
 import ...
 
 export let options = {
-    tags: { test_name: "test-script-1" }, // 태그 추가
+    tags: {                            // 태그 추가
+      team : 'server2',
+      test_name: 'test-script-2' 
+  	}, 
 };
 
 export default function () {
@@ -705,14 +734,27 @@ Include All option : All(전체 선택) 옵션이 가능한지를 묻는다.
 ![](https://velog.velcdn.com/images/mud_cookie/post/e8bfeda7-a215-4fc6-b18c-a5182a52c513/image.png)
 
 단순 작업이므로 JSON 코드에서 `WHEHE ` 이라는 문자열을
-`WHERE test_name =~ /^$test_name$/ AND ` 으로 일괄 변경하고 저장하자.
-저장은 우측상단의 Save dashboard 로 저장 가능하다.
+`team =~ /^$team$/ AND test_name =~ /^$test_name$/ AND \"group\" =~ /^$group$/ ` 으로 일괄 변경하고 저장하자.
+저장은 좌측 하단의 Save dashboard 로 저장해야 한다.
 
-이후 저장 후 DashBoard 화면으로 돌아오면 아래와 같이 적용됐음을 확인 가능하다.
+> 내가 커스텀한 panel 들 중 아래 세 개는 Group 설정이 적용되지 않아 InfluxDB 쿼리에서 조건을 제거했음을 참고하자. K6 자체에서 아래 메타데이터들은 Group 설정이 적용되지 않는다.
+- Data Sent
+- Data Received
+- virtual Users
 
-![](https://velog.velcdn.com/images/mud_cookie/post/7220e4aa-589d-416f-a933-e9798809e2e7/image.png)
+
+Grafana DashBoard 커스텀 방법 중 변수 설정만 작성했지만,
+이외 커스텀한 panel 을 만드는 방법은 기능이 워낙 많고 복잡해서 이 블로그 안에 포스팅하기에는 무리가 있다.
+
+차후 기회가 된다면 DashBoard 커스텀 방법을 소개할 예정이다.
+그 전에 비슷한 화면을 구현하고자 한다면, panel 들을 복사해서 사용하길 바란다.
 
 ---
 
 <br>
 <br>
+
+
+> 관련해 추가로 작성한 포스트
+- [K6 부하테스트 스크립트 작성법](https://velog.io/@mud_cookie/K6-%EB%B6%80%ED%95%98%ED%85%8C%EC%8A%A4%ED%8A%B8-%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8A%B8-%EC%9E%91%EC%84%B1%EB%B2%95)
+- [코루틴이란](https://velog.io/@mud_cookie/%EC%BD%94%EB%A3%A8%ED%8B%B4%EC%9D%B4%EB%9E%80)
