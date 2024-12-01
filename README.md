@@ -611,7 +611,7 @@ SHOW TAG VALUES WITH KEY = "team"
 SHOW TAG VALUES WITH KEY = "test_name" 
 SHOW TAG VALUES WITH KEY = "group" 
 값을 넣었다.
-이후 DashBoard 의 각 그래프에서 test_name 변수 값을 기준으로 아래와 같은 WHERE 조건문을 넣었다.
+이후 DashBoard 의 각 패널에서 test_name 변수 값을 기준으로 아래와 같은 WHERE 조건문을 넣었다.
 `WEHRE team =~ /^$team$/ AND test_name =~ /^$test_name$/ AND \"group\" =~ /^$group$/ `
 
 그래서 완성된 json 파일은 아래 Github 에 넣어두었다.
@@ -623,7 +623,7 @@ json 파일을 기준으로 DashBoard 를 import 하는 것은 위에서 이미 
 import 가 완료되었다면 아래와 같은 화면이 출력된다.
 
 > 내가 커스텀한 것은 team, test_name, group 이라는 변수 값으로, 강조한 박스 안에서 원하는 tean, test_name, group 태그를 선택하면 해당 결과만 출력할 수 있다.
-또한 기존 템플릿의 Error Per Second 그래프가 보이지 않는 이슈를 해결하고,
+또한 기존 템플릿의 Error Per Second 패널가 보이지 않는 이슈를 해결하고,
 최상단에는 총 Http request 수, failed 수, data sent, data received 를,
 최하단에는 URL 별로 http_req_duration 값을 Table 형태로 노출시켰다.
 
@@ -642,9 +642,9 @@ DashBoard 를 어떻게 커스텀했는지는 아래에 작성한다.
 <br>
 
 
-## Grafana DashBoard 커스텀 방법
+## Grafana DashBoard 커스텀 방법 (변수 지정)
 
-Grafana DashBoard 커스텀 방법을 알아보자.
+Grafana DashBoard 커스텀 방법을 알아보자. (내용이 많아 변수 지정만 설명한다.)
 크게는 두 가지로 나뉜다.
 - UI 에서 변경하는 방법
 - Json 코드를 변경하는 방법
@@ -668,11 +668,16 @@ export let options = {
 };
 
 export default function () {
-    ...
+  group('GET /api/books', function () {
+  	...
+  }
+  group('POST /api/books', function () {
+  	...
+  }
 }
 ```
 
-이 test_name 이라는 InfluxDB 값이 저장되었으므로, Grafana 에서 불러와야 한다.
+이 team, test_name, group 이라는 InfluxDB 값이 저장되었으므로, Grafana 에서 불러와야 한다.
 K6 Grafana DashBoard 에 진입해 우측 상단의 Edit -> Settings 에 진입한다.
 
 ![](https://velog.velcdn.com/images/mud_cookie/post/23b290a8-c73e-4241-9645-4c018b276fcd/image.png)
@@ -683,7 +688,7 @@ K6 Grafana DashBoard 에 진입해 우측 상단의 Edit -> Settings 에 진입�
 
 ![](https://velog.velcdn.com/images/mud_cookie/post/01964b5d-39b5-4ca2-9da9-8cb6aec94e9d/image.png)
 
-아래 번호에 맞게 진행한다.
+아래 번호에 맞게 진행한다. 여기서는 test_name 만 진행했지만, team 과 group 도 반복해 진행하자.
 1. InfluxDB 에서 Query 로 가져올 것이므로 Query 를 선택한다.
 2. 변수의 명을 지정한다.
 3. Data source 를 InfluxDB 로 지정한다.
@@ -696,18 +701,23 @@ Include All option : All(전체 선택) 옵션이 가능한지를 묻는다.
 
 ![](https://velog.velcdn.com/images/mud_cookie/post/b042d7b2-06eb-4ffc-93c2-4ef1b1185c24/image.png)
 
+** group 변수의 Query 는 아래와 같이 진행하자. 확인해보니 ::setup, ::teardown 과 같은 메서드들도 group 에 포함되니 정규식으로 제거하자.
+`SHOW TAG VALUES WITH KEY = "group" WHERE "group" !~ /^::(setup|teardown)$/` **
+
+<br>
+
 다시 DashBoard 탭으로 돌아와서, 아직 Save dashboard 로 따로 저장하지 않은 상태임에도 Grafana에서 저장 전 실시간 DashBoard 업데이트한 화면을 보여준다. 
 아래 화면과 같이 test_name 이라는 변수들이 잘 노출됨을 보여준다.
 
 ![](https://velog.velcdn.com/images/mud_cookie/post/4624b47f-6b0d-47fc-8d62-98f825db7bd4/image.png)
 
-아직 끝이 아니다. 각 그래프들에 변수 WHERE 조건을 추가해주어야 한다.
-각 그래프들도 결국 InfluxDB 에서 값을 조회해서 노출해주는 것일 뿐이다.
-먼저 그래프 하나를 선택해 쿼리를 지정하는 방법을 알아보자.
+아직 끝이 아니다. 각 패널들에 변수 WHERE 조건을 추가해주어야 한다.
+각 패널들도 결국 InfluxDB 에서 값을 조회해서 노출해주는 것일 뿐이다.
+먼저 패널 하나를 선택해 쿼리를 지정하는 방법을 알아보자.
 
-### 1. UI 에서 그래프별로 커스텀하는 방법
+### 1. UI 에서 패널별로 커스텀하는 방법
 
-그래프 노드에 마우스를 올리면 메뉴 바가 노출되고, 그것을 클릭해 Edit 탭으로 진입한다.
+패널에 마우스를 올리면 메뉴 바가 노출되고, 그것을 클릭해 Edit 탭으로 진입한다.
 
 ![](https://velog.velcdn.com/images/mud_cookie/post/5eaa9488-738c-4298-b516-267e0a05c5d8/image.png)
 
